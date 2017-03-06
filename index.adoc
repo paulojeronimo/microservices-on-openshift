@@ -1,0 +1,298 @@
+= Building microservices to run on OpenShift
+Paulo Jerônimo, {localdatetime}
+:toc: left
+
+== About
+
+The intention in the steps and references pointed out in this document is to simplify your self study about OpenShift and microservices.
+
+The steps were designed to run the https://github.com/openshift/origin/releases/tag/v1.5.0-alpha.3[latest OpenShift version (v1.5.0-alpha.3)] available at "{localdatetime}".
+
+About the author: http://j.mp/whoispj
+
+== Installing OpenShift locally (on a macOS, using Minishift)
+
+=== Installing (Xhye)
+
+[source,bash]
+----
+$ brew update
+$ brew install --HEAD xhyve
+$ brew install docker-machine-driver-xhyve
+$ sudo chown root:wheel $(brew --prefix)/opt/docker-machine-driver-xhyve/bin/docker-machine-driver-xhyve
+$ sudo chmod u+s $(brew --prefix)/opt/docker-machine-driver-xhyve/bin/docker-machine-driver-xhyve
+----
+
+* Refs:
+** https://github.com/mist64/xhyve#installation
+** https://github.com/zchee/docker-machine-driver-xhyve#install
+** https://github.com/minishift/minishift/blob/master/docs/docker-machine-drivers.md#homebrew-install
+
+=== Installing (Minishift)
+
+[source,bash]
+----
+$ brew tap caskroom/versions
+$ brew cask install minishift-beta
+$ minishift version
+----
+
+* Refs:
+** https://github.com/minishift/minishift#installing-minishift
+
+=== Configuring
+
+[source,bash]
+----
+$ minishift config set memory 7168
+$ minishift config set cpus 4
+$ minishift config set v 999
+$ minishift config view
+----
+
+=== Starting
+
+* Starting:
+[source,bash]
+----
+$ openshift_version=v1.5.0-alpha.3
+$ minishift start --openshift-version=$openshift_version --logtostderr --show-libmachine-logs
+$ minishift status
+----
+
+=== Restarting Minishift without parameters
+
+* This will starts Minishift using the default OpenShift version (v1.4.1)
+[source,bash]
+----
+$ minishift stop
+$ minishift start
+----
+
+* To configure Minishift to start OpenShift with version v1.5.0-alpha.3 do:
+[source,bash]
+-----
+$ minishift stop
+$ tree ~/.minishift | less
+$ minishift config set openshift-version $openshift_version
+-----
+
+* View config and restart Minishift:
+[source,bash]
+-----
+$ minishift config view
+$ minishift start
+-----
+
+=== Testing the oc command
+
+* Configuring PATH to find `oc` command:
+[source,bash]
+----
+$ tree ~/.minishift | less
+$ f=~/.bash_profile
+$ echo "export PATH=~/.minishift/cache/oc/$openshift_version:\$PATH" >> $f
+$ source $f
+$ echo $PATH
+----
+
+* Getting projects:
+[source,bash]
+----
+$ oc get projects
+----
+
+* Refs:
+** https://github.com/minishift/minishift#starting-minishift
+
+=== Running a Docker container (hello-world)
+
+[source,bash]
+----
+$ eval $(minishift docker-env)
+$ docker run hello-world
+$ docker ps -a
+$ docker images
+$ docker rmi -f hello-world
+$ docker images
+----
+
+=== Getting ip
+
+[source,bash]
+----
+$ minishift ip
+----
+
+=== Deploying a Node.js application
+
+[source,bash]
+----
+$ oc new-app https://github.com/openshift/nodejs-ex -l name=myapp
+$ oc logs -f bc/nodejs-ex &
+$ open -a Firefox https://$(minishift ip):8443
+----
+* The comand `oc logs` (above) will take some time ...
+
+[source,bash]
+----
+$ docker images
+$ oc get pods
+----
+
+[source,bash]
+----
+$ oc expose svc/nodejs-ex
+$ curl http://nodejs-ex-myproject.$(minishift ip).xip.io
+----
+
+* Refs:
+** https://github.com/minishift/minishift#deploying-a-sample-application
+** https://docs.openshift.org/latest/dev_guide/application_lifecycle/new_app.html
+
+=== Fast Iterative Java Development on OpenShift/Kubernetes Using Rsync
+
+[source,bash]
+----
+$ IMAGE=registry.access.redhat.com/jboss-eap-7/eap70-openshift
+$ REPO=https://github.com/paulojeronimo/openshift-javaee-helloworld
+$ git clone $REPO
+$ cd ${REPO##*/}
+$ oc new-app $IMAGE~$REPO
+$ oc logs -f bc/${REPO##*/} # it will take some time ...
+$ oc expose service ${REPO##*/}
+$ mvn package -Popenshift
+$ oc get pods  # To get the name of the running pod you will sync to
+$ oc rsync --include="ROOT.war" --exclude="*" target/ <pod_name>:/deployments/ --no-perms=true --watch # Replace <pod_name> with the value from the previous step
+----
+
+* Refs:
+** https://blog.openshift.com/fast-iterative-java-development-on-openshift-kubernetes-using-rsync/
+
+=== Stoping
+
+[source,bash]
+----
+$ minishift stop
+----
+
+=== Removing (Minishift)
+
+[source,bash]
+----
+$ rm -rf ~/.{minishift,kubes}
+$ brew cask remove minishift
+----
+
+* Refs:
+** https://github.com/minishift/minishift#uninstalling-minishift
+
+=== Removing (Xhyve)
+
+[source,bash]
+----
+$ brew remove docker-machine-driver-xhyve
+$ brew remove xhyve
+----
+
+== Building microservices
+
+=== Converting a monolithic Java EE application to microservices (using Docker Swarm)
+
+* Refs:
+** http://blog.arungupta.me/microservice-docker-stack-deploy-wildfly-javaee-couchbase/
+** http://blog.arungupta.me/monolithic-microservices-refactoring-javaee-applications/
+
+=== Using WildFly Swarm
+
+* Refs:
+** https://www.youtube.com/watch?v=Ce4lUQafupM[WildFly Swarm Criando microservices com Java EE 7] _(pt-br)_
+
+==== How to run Java fat-jars in Docker, Kubernetes and Openshift
+
+* Cloning and going to REPO dir:
+[source,bash]
+----
+$ REPO=https://github.com/redhat-helloworld-msa/hola
+$ git clone ${REPO##*/} && cd $_
+$ tree
+----
+
+* Running locally (via Maven):
+[source,bash]
+----
+$ log=/tmp/hola.log
+$ mvn wildfly-swarm:run &> $log &
+$ tail -f $log &
+$ open http://localhost:8080/api/hola
+$ kill %1
+----
+
+* Running in Docker:
+[source,bash]
+----
+$ mvn clean
+$ mvn package wildfly-swarm:package
+$ find . -name 'hola*.jar'
+$ cat Dockerfile
+$ docker build -t redhatmsa/hola .
+$ docker images
+$ docker run redhatmsa/hola &> $log &
+$ kill %3
+$ docker run -e JAVA_OPTIONS=-Xmx1g redhatmsa/hola &> $log &
+$ !-2
+----
+
+* Removing "Exited" "redhatmsa/hola" containers:
+[source,bash]
+----
+$ docker ps -a
+$ !! | awk '$2 == "redhatmsa/hola" { print $1 }'
+$ docker rm $(!!)
+$ !-3
+----
+
+* Deploy on OpenShift (via `oc`):
+[source,bash]
+----
+$ oc new-app redhatmsa/hola -e JAVA_OPTIONS=Xmx1g
+$ oc env dc/hola JAVA_OPTIONS=-Xmx200m
+----
+
+* Running in OpenShift (via Maven/Fabric8)
+[source,bash]
+----
+$ mvn clean package docker:build fabric8:json fabric8:apply
+----
+
+Finishing `tail`:
+[source,bash]
+----
+$ kill %2
+----
+
+* Refs:
+** https://developers.redhat.com/blog/2016/06/22/how-to-run-java-fat-jars-in-docker-kubernetes-and-openshift/
+
+==== Other aproaches to run WildFly Swarm in OpenShift
+
+** http://rafabene.com/2016/07/25/wildfly-swarm-openshift/
+
+=== Using Fabric8
+
+* Refs:
+** https://fabric8.io/guide/quickstarts/walkthrough.html[Walk through a simple quickstart]
+** https://developers.redhat.com/blog/2017/01/27/microservices-zero-downtime-deployment-hot-reconfiguration-on-openshift/[Microservices: Zero Downtime Deployment; Hot reconfiguration on OpenShift]
+
+== More references
+
+* Refs:
+** Other ways to install OpenShift locally:
+*** https://www.youtube.com/watch?v=-OOnGK-XeVY[OpenShift 3 install from start to finish]
+*** http://jorgemoral.es/2016/10/developing-locally-with-openshift/[Developing locally with OpenShift]
+** v JUG hagouts:
+*** Book Reading Club: "Building Microservices" by Sam Newman https://www.youtube.com/watch?v=Caj-qCOniXM[(Part 1)], (Part 2), (Part 3)
+*** https://www.youtube.com/watch?v=p2eydFmbJ_A[Kubernetes for Java developers]
+** Other DFJUG hangouts _(pt-br)_
+*** https://www.youtube.com/watch?v=ICpE3nDYj_8&index=5&list=PLkObiPpjQQ-cyjj5dyxKdoXHI2QuZJpnf[Microservices com Java e containers]
+*** https://www.youtube.com/watch?v=P2F00xMmQqM&list=PLkObiPpjQQ-cyjj5dyxKdoXHI2QuZJpnf&index=6[Plataforma Java e Microserviços]
