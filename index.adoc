@@ -214,7 +214,7 @@ $ brew remove xhyve
 [source,bash]
 ----
 $ REPO=https://github.com/redhat-helloworld-msa/hola
-$ git clone ${REPO##*/} && cd $_
+$ git clone $REPO && cd $_
 $ tree
 ----
 
